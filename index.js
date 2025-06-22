@@ -5,6 +5,7 @@ const dotenv = require("dotenv");
 dotenv.config();
 
 const authRoutes = require("./src/routes/authRoutes"); // ← agora com src/
+const productRoutes = require("./src/routes/productRoutes");
 
 const app = express();
 
@@ -12,6 +13,7 @@ app.use(cors({ origin: "http://localhost:5173", credentials: true }));
 app.use(express.json());
 
 app.use("/api/auth", authRoutes);
+app.use("/api/products", productRoutes);
 
 app.get("/", (req, res) => {
   res.json({ message: "Backend funcionando" });
