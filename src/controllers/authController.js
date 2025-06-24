@@ -89,3 +89,31 @@ exports.getUserProfile = async (req, res) => {
     res.status(401).json({ error: "Token inválido" });
   }
 };
+
+exports.signup = async (req, res) => {
+  try {
+    const { nome, email, senha } = req.body;
+
+    if (!nome || !email || !senha) {
+      return res
+        .status(400)
+        .json({ message: "Todos os campos são obrigatórios." });
+    }
+
+    const existingUser = await findUserByEmail(email);
+    if (existingUser) {
+      return res.status(409).json({ message: "Email já cadastrado." });
+    }
+
+    const hashedPassword = await bcrypt.hash(senha, 10);
+    await pool.query(
+      "INSERT INTO usuarios (nome, email, senha) VALUES (?, ?, ?)",
+      [nome, email, hashedPassword]
+    );
+
+    return res.status(201).json({ message: "Usuário criado com sucesso." });
+  } catch (error) {
+    console.error("Erro no signup:", error);
+    return res.status(500).json({ message: "Erro interno ao criar conta." });
+  }
+};

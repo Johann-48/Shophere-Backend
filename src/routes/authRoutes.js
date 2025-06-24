@@ -8,6 +8,7 @@ const path = require("path");
 // POST /api/auth/login
 router.post("/login", authController.login);
 router.get("/me", authController.getUserProfile);
+router.post("/signup", authController.signup);
 
 // Futuramente poderemos adicionar registro, logout, etc.
 // router.post('/register', authController.register);
