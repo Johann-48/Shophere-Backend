@@ -2,6 +2,7 @@
 const express = require("express");
 const router = express.Router();
 const authController = require("../controllers/authController");
+const authMiddleware = require("../middleware/auth");
 const multer = require("multer");
 const path = require("path");
 
@@ -42,6 +43,28 @@ router.post("/upload-profile", upload.single("foto"), async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: "Erro ao salvar imagem" });
   }
+});
+
+router.get("/me", authMiddleware, async (req, res) => {
+  const user = await User.findById(req.userId);
+  res.json({
+    nome: user.nome,
+    email: user.email,
+    telefone: user.telefone,
+    avatar: user.avatarUrl,
+  });
+});
+
+// PUT /api/auth/me
+router.put("/me", authMiddleware, async (req, res) => {
+  const { nome, email, telefone } = req.body;
+  const user = await User.findById(req.userId);
+  if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
+  user.nome = nome;
+  user.email = email;
+  user.telefone = telefone;
+  await user.save();
+  res.json({ message: "Perfil atualizado com sucesso" });
 });
 
 module.exports = router;

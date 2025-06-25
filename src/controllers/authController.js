@@ -117,3 +117,41 @@ exports.signup = async (req, res) => {
     return res.status(500).json({ message: "Erro interno ao criar conta." });
   }
 };
+
+exports.updateUserProfile = async (req, res) => {
+  try {
+    const userId = req.userId; // preenchido pelo middleware
+    const { nome, email, telefone } = req.body;
+
+    // Atualiza no banco
+    await pool.query(
+      "UPDATE usuarios SET nome = ?, email = ?, telefone = ? WHERE id = ?",
+      [nome, email, telefone, userId]
+    );
+
+    // Retorna o usuário atualizado
+    const [rows] = await pool.query(
+      "SELECT id, nome, email, telefone FROM usuarios WHERE id = ?",
+      [userId]
+    );
+    return res.json(rows[0]);
+  } catch (err) {
+    console.error("Erro ao atualizar perfil:", err);
+    return res.status(500).json({ error: "Erro interno ao salvar perfil" });
+  }
+};
+
+exports.uploadProfileImage = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const imageUrl = `/uploads/${req.file.filename}`;
+    await pool.query("UPDATE usuarios SET foto = ? WHERE id = ?", [
+      imageUrl,
+      userId,
+    ]);
+    res.json({ imageUrl });
+  } catch (err) {
+    console.error("Erro no upload de imagem:", err);
+    res.status(500).json({ error: "Erro ao salvar imagem" });
+  }
+};
