@@ -26,7 +26,7 @@ app.listen(PORT, () => {
   console.log(`Servidor rodando: http://localhost:${PORT}`);
 });
 
-app.use((req, res, next) => {
+app.use((req, res) => {
   console.log("Rota não encontrada:", req.method, req.url);
-  next();
+  res.status(404).json({ error: "Rota não encontrada" }); // responde com 404 e mensagem
 });
