@@ -110,3 +110,59 @@ exports.listProducts = async (req, res) => {
     return res.status(500).json({ error: "Erro interno" });
   }
 };
+
+exports.getByCategoria = async (req, res) => {
+  const { categoriaId } = req.params;
+  try {
+    const [rows] = await pool.query(
+      `
+      SELECT p.id, p.marca, p.nome, p.preco, p.fotos, p.codigo_barras
+      FROM produtos p
+      JOIN produtos_categorias pc ON pc.produto_id = p.id
+      WHERE pc.categoria_id = ?
+      `,
+      [categoriaId]
+    );
+
+    const produtos = rows.map((prod) => {
+      let thumbnails = [];
+      if (prod.fotos) {
+        try {
+          thumbnails = JSON.parse(prod.fotos);
+        } catch {
+          thumbnails = prod.fotos
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) => s);
+        }
+      }
+
+      const mainImage =
+        thumbnails.length > 0
+          ? thumbnails[0]
+          : "https://via.placeholder.com/400x400?text=Sem+Imagem";
+
+      return {
+        id: prod.id,
+        title: prod.nome,
+        price: `R$ ${parseFloat(prod.preco).toFixed(2)}`,
+        mainImage,
+        thumbnails,
+        marca: prod.marca,
+        codigo_barras: prod.codigo_barras,
+        description: prod.marca
+          ? `Produto da marca ${prod.marca}`
+          : "Descrição não disponível",
+        stock: true,
+        stars: 0,
+      };
+    });
+
+    return res.json(produtos);
+  } catch (error) {
+    console.error("Erro ao buscar produtos por categoria:", error);
+    return res
+      .status(500)
+      .json({ error: "Erro ao buscar produtos por categoria" });
+  }
+};
