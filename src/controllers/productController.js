@@ -1,67 +1,72 @@
-// src/controllers/productController.js
 const pool = require("../config/db");
 
-// GET /api/products/:id
+// ✅ GET /api/products/:id
 exports.getProductById = async (req, res) => {
   const { id } = req.params;
+  console.log("🧪 ID recebido no backend:", id); // ← Adicione isso
   try {
-    // Ajuste o SELECT conforme suas colunas reais.
-    // Aqui supondo colunas: id, marca, nome, preco, fotos (JSON text ou CSV), codigo_barras.
-    const [rows] = await pool.query(
-      "SELECT id, marca, nome, preco, fotos, codigo_barras FROM produtos WHERE id = ?",
+    // 1. Buscar o produto
+    const result = await pool.query(
+      "SELECT id, marca, nome, preco, fotos, codigo_barras, quantidade FROM produtos WHERE id = ?",
       [id]
     );
-    if (rows.length === 0) {
+
+    // Adicione este log:
+    console.log("Resultado do SELECT produto por ID:", result);
+
+    const produtoRows = Array.isArray(result[0]) ? result[0] : [];
+
+    if (!produtoRows || produtoRows.length === 0) {
       return res.status(404).json({ error: "Produto não encontrado" });
     }
-    const prod = rows[0];
 
-    // Parse da coluna `fotos`. Dependendo de como você armazenar:
-    //  - Se for JSON string no campo `fotos`, use JSON.parse.
-    //  - Se for CSV (URL1,URL2,...), use split.
+    const prod = produtoRows[0];
+
+    // 2. Buscar categorias associadas
+    const [catRows] = await pool.query(
+      `SELECT c.id, c.nome 
+       FROM categorias c
+       JOIN produtos_categorias pc ON pc.categoria_id = c.id
+       WHERE pc.produto_id = ?`,
+      [id]
+    );
+
+    // 3. Processar imagens
     let thumbnails = [];
-    let mainImage = "";
 
-    if (prod.fotos) {
+    // somente parseia se for string
+    if (typeof prod.fotos === "string" && prod.fotos.trim() !== "") {
       try {
-        // tente JSON.parse; se falhar, trate como CSV:
-        const arr = JSON.parse(prod.fotos);
-        if (Array.isArray(arr) && arr.length > 0) {
-          thumbnails = arr;
-        } else {
-          thumbnails = [];
-        }
-      } catch (e) {
-        // fallback CSV
+        const parsed = JSON.parse(prod.fotos);
+        thumbnails = Array.isArray(parsed) ? parsed : [];
+      } catch {
         thumbnails = prod.fotos
           .split(",")
           .map((s) => s.trim())
-          .filter((s) => s);
+          .filter(Boolean);
       }
     }
-    if (thumbnails.length > 0) {
-      mainImage = thumbnails[0];
-    } else {
-      // placeholder se não houver imagens ainda
-      mainImage = "https://via.placeholder.com/400x400?text=Sem+Imagem";
-    }
 
-    // Monte o objeto no formato que o frontend espera:
+    const mainImage =
+      thumbnails.length > 0
+        ? thumbnails[0]
+        : "https://via.placeholder.com/400x400?text=Sem+Imagem";
+
     const produtoResponse = {
       id: prod.id,
       title: prod.nome,
-      price: `R$ ${parseFloat(prod.preco).toFixed(2)}`, // formate conforme necessário
-      // oldPrice: null, // ou se tiver coluna de preço antigo
+      price: `R$ ${parseFloat(prod.preco).toFixed(2)}`,
       marca: prod.marca,
       codigo_barras: prod.codigo_barras,
       mainImage,
       thumbnails,
-      // Você não tem descrição/estoque/estrelas na tabela atual; se quiser, pode adicionar colunas ou usar valores padrão:
       description: prod.marca
         ? `Produto da marca ${prod.marca}`
         : `Descrição não disponível`,
-      stock: true, // ou false conforme lógica sua; se não tiver coluna de estoque, mantenha true
-      stars: 0, // sem dado real, ou defina padrão
+      stock: prod.quantidade > 0,
+      stars: 0,
+      quantidade: prod.quantidade,
+      categorias: catRows.map((cat) => cat.nome),
     };
 
     return res.json(produtoResponse);
@@ -71,39 +76,52 @@ exports.getProductById = async (req, res) => {
   }
 };
 
-// (Opcional) GET /api/products para lista de produtos
+// ✅ GET /api/products
 exports.listProducts = async (req, res) => {
   try {
     const [rows] = await pool.query(
-      "SELECT id, marca, nome, preco, fotos, codigo_barras FROM produtos"
+      "SELECT id, marca, nome, preco, fotos, codigo_barras, quantidade FROM produtos"
     );
+
     const list = rows.map((prod) => {
       let thumbnails = [];
+
       try {
-        const arr = JSON.parse(prod.fotos);
-        if (Array.isArray(arr)) thumbnails = arr;
+        if (prod.fotos) {
+          const parsed = JSON.parse(prod.fotos);
+          if (Array.isArray(parsed)) {
+            thumbnails = parsed;
+          }
+        }
       } catch {
-        thumbnails = prod.fotos
-          ? prod.fotos
-              .split(",")
-              .map((s) => s.trim())
-              .filter((s) => s)
-          : [];
+        if (typeof prod.fotos === "string") {
+          thumbnails = prod.fotos
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+        }
       }
+
+      // Protege contra null e não-array
+      if (!Array.isArray(thumbnails)) thumbnails = [];
+
       const mainImage =
         thumbnails.length > 0
           ? thumbnails[0]
           : "https://via.placeholder.com/400x400?text=Sem+Imagem";
+
       return {
         id: prod.id,
         title: prod.nome,
         price: `R$ ${parseFloat(prod.preco).toFixed(2)}`,
         mainImage,
         thumbnails,
-        stock: true,
+        stock: prod.quantidade > 0,
         stars: 0,
+        quantidade: prod.quantidade,
       };
     });
+
     return res.json(list);
   } catch (err) {
     console.error("Erro ao listar produtos:", err);
