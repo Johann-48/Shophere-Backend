@@ -3,13 +3,20 @@ const pool = require("../config/db");
 // ✅ GET /api/products/:id
 exports.getProductById = async (req, res) => {
   const { id } = req.params;
+  console.log("🧪 ID recebido no backend:", id); // ← Adicione isso
   try {
     // 1. Buscar o produto
-    const [produtoRows] = await pool.query(
+    const result = await pool.query(
       "SELECT id, marca, nome, preco, fotos, codigo_barras, quantidade FROM produtos WHERE id = ?",
       [id]
     );
-    if (produtoRows.length === 0) {
+
+    // Adicione este log:
+    console.log("Resultado do SELECT produto por ID:", result);
+
+    const produtoRows = Array.isArray(result[0]) ? result[0] : [];
+
+    if (!produtoRows || produtoRows.length === 0) {
       return res.status(404).json({ error: "Produto não encontrado" });
     }
 
@@ -26,17 +33,24 @@ exports.getProductById = async (req, res) => {
 
     // 3. Processar imagens
     let thumbnails = [];
-    let mainImage = "";
-    try {
-      thumbnails = JSON.parse(prod.fotos);
-    } catch (e) {
-      thumbnails = prod.fotos ? prod.fotos.split(",").map((s) => s.trim()) : [];
+
+    // somente parseia se for string
+    if (typeof prod.fotos === "string" && prod.fotos.trim() !== "") {
+      try {
+        const parsed = JSON.parse(prod.fotos);
+        thumbnails = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        thumbnails = prod.fotos
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
     }
-    if (thumbnails.length > 0) {
-      mainImage = thumbnails[0];
-    } else {
-      mainImage = "https://via.placeholder.com/400x400?text=Sem+Imagem";
-    }
+
+    const mainImage =
+      thumbnails.length > 0
+        ? thumbnails[0]
+        : "https://via.placeholder.com/400x400?text=Sem+Imagem";
 
     const produtoResponse = {
       id: prod.id,
@@ -118,6 +132,7 @@ exports.listProducts = async (req, res) => {
 // ✅ GET /api/products/categoria/:categoriaId
 exports.getByCategoria = async (req, res) => {
   const { categoriaId } = req.params;
+
   try {
     const [rows] = await pool.query(
       `SELECT p.id, p.nome, p.preco, p.fotos, p.quantidade
@@ -127,25 +142,40 @@ exports.getByCategoria = async (req, res) => {
       [categoriaId]
     );
 
+    // ✅ Verifica se rows existe e tem dados
+    if (!rows || rows.length === 0) {
+      return res
+        .status(404)
+        .json({ error: "Nenhum produto encontrado para esta categoria." });
+    }
+
+    // ─── dentro de getByCategoria ───
     const list = rows.map((prod) => {
       let thumbnails = [];
-      try {
-        thumbnails = JSON.parse(prod.fotos);
-      } catch {
-        thumbnails = prod.fotos
-          ? prod.fotos
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean)
-          : [];
+
+      // só tenta parsear se for string não-vazia
+      if (typeof prod.fotos === "string" && prod.fotos.trim() !== "") {
+        try {
+          const parsed = JSON.parse(prod.fotos);
+          thumbnails = Array.isArray(parsed) ? parsed : [];
+        } catch {
+          thumbnails = prod.fotos
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+        }
       }
+
+      const mainImage =
+        thumbnails.length > 0
+          ? thumbnails[0]
+          : "https://via.placeholder.com/400x400?text=Sem+Imagem";
+
       return {
         id: prod.id,
         title: prod.nome,
         price: `R$ ${parseFloat(prod.preco).toFixed(2)}`,
-        mainImage:
-          thumbnails[0] ||
-          "https://via.placeholder.com/400x400?text=Sem+Imagem",
+        mainImage,
         thumbnails,
         stock: prod.quantidade > 0,
         stars: 0,
@@ -156,6 +186,8 @@ exports.getByCategoria = async (req, res) => {
     return res.json(list);
   } catch (err) {
     console.error("Erro ao buscar produtos por categoria:", err);
-    return res.status(500).json({ error: "Erro interno" });
+    return res
+      .status(500)
+      .json({ error: "Erro interno ao buscar produtos por categoria." });
   }
 };
