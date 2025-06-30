@@ -11,6 +11,14 @@ async function findUserByEmail(email) {
   return rows.length > 0 ? rows[0] : null;
 }
 
+// Função auxiliar: buscar comércio por email
+async function findCommerceByEmail(email) {
+  const [rows] = await pool.query("SELECT * FROM comercios WHERE email = ?", [
+    email,
+  ]);
+  return rows.length > 0 ? { ...rows[0], isCommerce: true } : null;
+}
+
 // Função para fazer login
 exports.login = async (req, res) => {
   try {
@@ -21,49 +29,47 @@ exports.login = async (req, res) => {
         .json({ message: "Email e senha são obrigatórios." });
     }
 
-    // 1) Buscar usuário no banco
-    const user = await findUserByEmail(email);
-    if (!user) {
+    // ↓↓↓ INÍCIO DO PATCH ↓↓↓
+    let entity = await findUserByEmail(email);
+    let role = "user";
+
+    if (!entity) {
+      entity = await findCommerceByEmail(email);
+      role = entity ? "commerce" : role;
+    }
+
+    if (!entity) {
       return res.status(401).json({ message: "Credenciais inválidas." });
     }
+    // ↑↑↑ FIM DO PATCH ↑↑↑
 
-    // 2) Verificar senha
-    // Observação: no dump SQL original, alguns usuários podem ter senha em texto puro
-    // e outros já podem ter hash bcrypt. Vamos detectar:
+    // ↓↓↓ USAR entity.senha ↓↓↓
     let senhaValida = false;
-    if (user.senha.startsWith("$2b$") || user.senha.startsWith("$2a$")) {
-      // Se a coluna já contém um hash bcrypt
-      senhaValida = await bcrypt.compare(senha, user.senha);
+    if (entity.senha.startsWith("$2b$") || entity.senha.startsWith("$2a$")) {
+      senhaValida = await bcrypt.compare(senha, entity.senha);
     } else {
-      // Senha em texto simples (não recomendável em produção!)
-      senhaValida = senha === user.senha;
+      senhaValida = senha === entity.senha;
     }
-
     if (!senhaValida) {
       return res.status(401).json({ message: "Credenciais inválidas." });
     }
+    // ↑↑↑ FIM da verificação de senha ↑↑↑
 
-    // 3) Gerar token JWT
+    // Gera token com role...
     const payload = {
-      id: user.id,
-      email: user.email,
-      nome: user.nome || null,
-      cidade: user.cidade || null,
+      id: entity.id,
+      email: entity.email,
+      nome: entity.nome,
+      role,
     };
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
       expiresIn: process.env.JWT_EXPIRES_IN || "1d",
     });
 
-    // 4) Retornar token e informações básicas
     return res.json({
       message: "Autenticação realizada com sucesso.",
       token,
-      user: {
-        id: user.id,
-        email: user.email,
-        nome: user.nome,
-        cidade: user.cidade,
-      },
+      user: { id: entity.id, email: entity.email, nome: entity.nome, role },
     });
   } catch (error) {
     console.error("Erro no login:", error);
@@ -92,12 +98,10 @@ exports.getUserProfile = async (req, res) => {
 
 exports.signup = async (req, res) => {
   try {
-    const { nome, email, senha } = req.body;
+    const { nome, email, senha, endereco, telefone } = req.body;
 
     if (!nome || !email || !senha) {
-      return res
-        .status(400)
-        .json({ message: "Todos os campos são obrigatórios." });
+      return res.status(400).json({ message: "Todos os campos obrigatórios." });
     }
 
     const existingUser = await findUserByEmail(email);
@@ -107,8 +111,8 @@ exports.signup = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(senha, 10);
     await pool.query(
-      "INSERT INTO usuarios (nome, email, senha) VALUES (?, ?, ?)",
-      [nome, email, hashedPassword]
+      "INSERT INTO usuarios (nome, email, senha, endereco, telefone) VALUES (?, ?, ?, ?, ?)",
+      [nome, email, hashedPassword, endereco || null, telefone || null]
     );
 
     return res.status(201).json({ message: "Usuário criado com sucesso." });

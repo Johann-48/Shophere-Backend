@@ -7,6 +7,7 @@ dotenv.config();
 const authRoutes = require("./src/routes/authRoutes");
 const productRoutes = require("./src/routes/productRoutes");
 const categoryRoutes = require("./src/routes/categoryRoutes"); // ← adicione aqui
+const commerceRoutes = require("./src/routes/commerceRoutes");
 
 const app = express();
 
@@ -17,6 +18,7 @@ app.use("/api/auth", authRoutes);
 console.log("🔍 productRoutes:", productRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/categories", categoryRoutes); // ← e monte aqui
+app.use("/api/commerces", commerceRoutes);
 
 app.get("/", (req, res) => {
   res.json({ message: "Backend funcionando" });
