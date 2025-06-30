@@ -3,24 +3,32 @@ const pool = require("../config/db");
 // ✅ GET /api/products/:id
 exports.getProductById = async (req, res) => {
   const { id } = req.params;
-  console.log("🧪 ID recebido no backend:", id); // ← Adicione isso
+
   try {
-    // 1. Buscar o produto
-    const result = await pool.query(
-      "SELECT id, marca, nome, preco, fotos, codigo_barras, quantidade FROM produtos WHERE id = ?",
+    // 1. Buscar produto + dados do comércio
+    const [rows] = await pool.query(
+      `SELECT 
+         p.id,
+         p.marca,
+         p.nome        AS produto_nome,
+         p.preco,
+         p.fotos,
+         p.codigo_barras,
+         p.quantidade,
+         p.comercio_id,
+         c.nome       AS comercio_nome,
+         c.telefone   AS comercio_telefone,
+         c.endereco   AS comercio_endereco
+       FROM produtos p
+       JOIN comercios c ON p.comercio_id = c.id
+       WHERE p.id = ?`,
       [id]
     );
 
-    // Adicione este log:
-    console.log("Resultado do SELECT produto por ID:", result);
-
-    const produtoRows = Array.isArray(result[0]) ? result[0] : [];
-
-    if (!produtoRows || produtoRows.length === 0) {
+    if (rows.length === 0) {
       return res.status(404).json({ error: "Produto não encontrado" });
     }
-
-    const prod = produtoRows[0];
+    const prod = rows[0];
 
     // 2. Buscar categorias associadas
     const [catRows] = await pool.query(
@@ -54,24 +62,28 @@ exports.getProductById = async (req, res) => {
 
     const produtoResponse = {
       id: prod.id,
-      title: prod.nome,
+      title: prod.produto_nome,
       price: `R$ ${parseFloat(prod.preco).toFixed(2)}`,
       marca: prod.marca,
-      codigo_barras: prod.codigo_barras,
       mainImage,
       thumbnails,
-      description: prod.marca
-        ? `Produto da marca ${prod.marca}`
-        : `Descrição não disponível`,
+      description: `Produto da marca ${prod.marca}`,
       stock: prod.quantidade > 0,
-      stars: 0,
       quantidade: prod.quantidade,
-      categorias: catRows.map((cat) => cat.nome),
+      categorias: catRows.map((c) => c.nome),
+
+      // ► NOVO BLOCO: dados do comércio
+      comercio: {
+        id: prod.comercio_id,
+        nome: prod.comercio_nome,
+        telefone: prod.comercio_telefone,
+        endereco: prod.comercio_endereco,
+      },
     };
 
     return res.json(produtoResponse);
   } catch (err) {
-    console.error("Erro ao buscar produto:", err);
+    console.error(err);
     return res.status(500).json({ error: "Erro interno" });
   }
 };
@@ -79,46 +91,49 @@ exports.getProductById = async (req, res) => {
 // ✅ GET /api/products
 exports.listProducts = async (req, res) => {
   try {
+    // 1. Buscar produtos + nome do comércio
     const [rows] = await pool.query(
-      "SELECT id, marca, nome, preco, fotos, codigo_barras, quantidade FROM produtos"
+      `SELECT
+         p.id,
+         p.marca,
+         p.nome      AS produto_nome,
+         p.preco,
+         p.fotos,
+         p.quantidade,
+         c.id        AS comercio_id,
+         c.nome      AS comercio_nome
+       FROM produtos p
+       JOIN comercios c ON p.comercio_id = c.id`
     );
 
+    // 2. Transformar para o formato que o front espera
     const list = rows.map((prod) => {
+      // parsing de fotos igual antes…
       let thumbnails = [];
-
       try {
         if (prod.fotos) {
           const parsed = JSON.parse(prod.fotos);
-          if (Array.isArray(parsed)) {
-            thumbnails = parsed;
-          }
+          if (Array.isArray(parsed)) thumbnails = parsed;
         }
       } catch {
-        if (typeof prod.fotos === "string") {
-          thumbnails = prod.fotos
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean);
-        }
+        thumbnails = prod.fotos
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
       }
-
-      // Protege contra null e não-array
       if (!Array.isArray(thumbnails)) thumbnails = [];
-
-      const mainImage =
-        thumbnails.length > 0
-          ? thumbnails[0]
-          : "https://via.placeholder.com/400x400?text=Sem+Imagem";
+      const mainImage = thumbnails[0] || "/assets/placeholder.png";
 
       return {
         id: prod.id,
-        title: prod.nome,
+        title: prod.produto_nome,
         price: `R$ ${parseFloat(prod.preco).toFixed(2)}`,
         mainImage,
         thumbnails,
         stock: prod.quantidade > 0,
-        stars: 0,
         quantidade: prod.quantidade,
+        // ► NOVO campo:
+        comercioNome: prod.comercio_nome,
       };
     });
 
