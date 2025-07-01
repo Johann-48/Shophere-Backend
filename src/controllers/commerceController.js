@@ -44,20 +44,62 @@ exports.signupCommerce = async (req, res) => {
 
 // Listar todos os comércios (opcional)
 exports.getAllCommerces = async (req, res) => {
-  const [rows] = await pool.query(
-    "SELECT id, nome, email, endereco, telefone, fotos FROM comercios"
-  );
-  res.json(rows);
+  try {
+    const [rows] = await pool.query(
+      `SELECT
+         id,
+         nome          AS name,
+         descricao     AS description,
+         fotos      AS logoUrl
+       FROM comercios
+       ORDER BY nome`
+    );
+    res.json({ commerces: rows });
+  } catch (err) {
+    console.error("Erro ao listar comércios:", err);
+    res.status(500).json({ error: "Erro ao listar comércios" });
+  }
 };
 
-// Obter detalhes de um comércio por ID
 exports.getCommerceById = async (req, res) => {
   const { id } = req.params;
-  const [rows] = await pool.query(
-    "SELECT id, nome, email, endereco, telefone, fotos FROM comercios WHERE id = ?",
-    [id]
-  );
-  if (!rows.length)
-    return res.status(404).json({ message: "Comércio não encontrado." });
-  res.json(rows[0]);
+  try {
+    const [rows] = await pool.query(
+      `SELECT
+         id,
+         nome          AS name,
+         descricao     AS description,
+         fotos      AS logoUrl
+       FROM comercios
+       WHERE id = ?`,
+      [id]
+    );
+    if (!rows.length) {
+      return res.status(404).json({ error: "Comércio não encontrado." });
+    }
+    res.json({ commerce: rows[0] });
+  } catch (err) {
+    console.error("Erro ao buscar comércio:", err);
+    res.status(500).json({ error: "Erro ao buscar comércio" });
+  }
+};
+
+exports.searchCommerces = async (req, res) => {
+  const q = req.query.q || "";
+  try {
+    const [rows] = await pool.query(
+      `SELECT 
+         id,
+         nome AS name,
+         fotos AS logoUrl
+       FROM comercios
+       WHERE nome LIKE ?
+       ORDER BY nome`,
+      [`%${q}%`]
+    );
+    res.json({ commerces: rows });
+  } catch (err) {
+    console.error("Erro ao buscar comércios:", err);
+    res.status(500).json({ error: "Erro ao buscar comércios" });
+  }
 };

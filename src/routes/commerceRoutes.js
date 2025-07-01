@@ -6,6 +6,7 @@ const controller = require("../controllers/commerceController");
 // POST /api/commerces/signup → cria novo comércio
 router.post("/signup", controller.signupCommerce);
 
+router.get("/search", controller.searchCommerces);
 // GET  /api/commerces       → lista todos (opcional)
 router.get("/", controller.getAllCommerces);
 

@@ -199,3 +199,50 @@ exports.getByCategoria = async (req, res) => {
       .json({ error: "Erro ao buscar produtos por categoria" });
   }
 };
+
+exports.searchProducts = async (req, res) => {
+  const q = req.query.q || "";
+  try {
+    const sql = `
+      SELECT 
+        p.id,
+        p.nome      AS name,
+        p.preco     AS price,
+        p.descricao AS description,
+        p.fotos AS mainImage,
+        c.nome      AS comercioNome
+      FROM produtos p
+      LEFT JOIN comercios c ON p.comercio_id = c.id
+      WHERE p.nome LIKE ?
+      LIMIT 50
+    `;
+    const [rows] = await pool.query(sql, [`%${q}%`]);
+    res.json({ products: rows });
+  } catch (err) {
+    console.error("Erro na busca:", err);
+    res.status(500).json({ error: "Erro ao buscar produtos" });
+  }
+};
+
+exports.getProductsByCommerce = async (req, res) => {
+  const { id } = req.params; // id do comércio
+  try {
+    const [rows] = await pool.query(
+      `SELECT 
+         p.id,
+         p.nome        AS name,
+         p.preco       AS price,
+         p.descricao   AS description,
+         p.fotos       AS mainImage,    /* se for JSON, ou p.fotos se for string */
+         c.nome        AS comercioNome
+       FROM produtos p
+       LEFT JOIN comercios c ON p.comercio_id = c.id
+       WHERE p.comercio_id = ?`,
+      [id]
+    );
+    res.json({ products: rows });
+  } catch (err) {
+    console.error("Erro ao buscar produtos por comércio:", err);
+    res.status(500).json({ error: "Erro ao buscar produtos do comércio" });
+  }
+};
