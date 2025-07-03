@@ -246,3 +246,29 @@ exports.getProductsByCommerce = async (req, res) => {
     res.status(500).json({ error: "Erro ao buscar produtos do comércio" });
   }
 };
+
+// Buscar produtos por código de barras (para comparação)
+exports.getProductsByBarcode = async (req, res) => {
+  const { codigo } = req.params;
+  try {
+    const [rows] = await pool.query(
+      `SELECT 
+         p.id,
+         p.nome AS name,
+         p.preco AS price,
+         p.descricao AS description,
+         p.fotos AS mainImage,
+         p.codigo_barras AS barcode,
+         c.nome AS comercioNome,
+         c.id AS comercioId
+       FROM produtos p
+       LEFT JOIN comercios c ON p.comercio_id = c.id
+       WHERE p.codigo_barras = ?`,
+      [codigo]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error("Erro ao buscar produtos por código de barras:", err);
+    res.status(500).json({ message: "Erro interno ao buscar produtos." });
+  }
+};

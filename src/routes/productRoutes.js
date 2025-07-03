@@ -8,5 +8,6 @@ router.get("/search", productController.searchProducts);
 router.get("/", productController.listProducts);
 router.get("/:id", productController.getProductById);
 router.get("/commerce/:id", productController.getProductsByCommerce);
+router.get("/barcode/:codigo", productController.getProductsByBarcode);
 
 module.exports = router;
