@@ -10,15 +10,15 @@ exports.getProductById = async (req, res) => {
       `SELECT 
          p.id,
          p.marca,
-         p.nome        AS produto_nome,
+         p.nome            AS produto_nome,
          p.preco,
          p.fotos,
-         p.codigo_barras,
+         p.codigo_barras   AS barcode,        -- já selecionado
          p.quantidade,
          p.comercio_id,
-         c.nome       AS comercio_nome,
-         c.telefone   AS comercio_telefone,
-         c.endereco   AS comercio_endereco
+         c.nome            AS comercio_nome,
+         c.telefone        AS comercio_telefone,
+         c.endereco        AS comercio_endereco
        FROM produtos p
        JOIN comercios c ON p.comercio_id = c.id
        WHERE p.id = ?`,
@@ -41,8 +41,6 @@ exports.getProductById = async (req, res) => {
 
     // 3. Processar imagens
     let thumbnails = [];
-
-    // somente parseia se for string
     if (typeof prod.fotos === "string" && prod.fotos.trim() !== "") {
       try {
         const parsed = JSON.parse(prod.fotos);
@@ -54,12 +52,12 @@ exports.getProductById = async (req, res) => {
           .filter(Boolean);
       }
     }
-
     const mainImage =
       thumbnails.length > 0
         ? thumbnails[0]
         : "https://via.placeholder.com/400x400?text=Sem+Imagem";
 
+    // 4. Monta resposta
     const produtoResponse = {
       id: prod.id,
       title: prod.produto_nome,
@@ -72,7 +70,10 @@ exports.getProductById = async (req, res) => {
       quantidade: prod.quantidade,
       categorias: catRows.map((c) => c.nome),
 
-      // ► NOVO BLOCO: dados do comércio
+      // ◾ Aqui adicionamos o código de barras:
+      barcode: prod.barcode,
+
+      // ◾ Dados do comércio
       comercio: {
         id: prod.comercio_id,
         nome: prod.comercio_nome,
@@ -91,60 +92,60 @@ exports.getProductById = async (req, res) => {
 // ✅ GET /api/products
 exports.listProducts = async (req, res) => {
   try {
-    // 1. Buscar produtos + nome do comércio
-    const [rows] = await pool.query(
-      `SELECT
-         p.id,
-         p.marca,
-         p.nome      AS produto_nome,
-         p.preco,
-         p.fotos,
-         p.quantidade,
-         c.id        AS comercio_id,
-         c.nome      AS comercio_nome
-       FROM produtos p
-       JOIN comercios c ON p.comercio_id = c.id`
-    );
+    const [rows] = await pool.query(`
+      SELECT 
+        p.id,
+        p.nome AS title,
+        p.preco AS price,
+        p.fotos AS fotos,
+        p.codigo_barras AS barcode,
+        p.marca,
+        c.nome AS comercioNome
+      FROM produtos p
+      JOIN comercios c ON c.id = p.comercio_id
+    `);
 
-    // 2. Transformar para o formato que o front espera
-    const list = rows.map((prod) => {
-      // parsing de fotos igual antes…
+    const produtos = rows.map((prod) => {
       let thumbnails = [];
-      try {
-        if (prod.fotos) {
-          const parsed = JSON.parse(prod.fotos);
-          if (Array.isArray(parsed)) thumbnails = parsed;
+
+      if (prod.fotos) {
+        try {
+          thumbnails = JSON.parse(prod.fotos);
+        } catch {
+          thumbnails = prod.fotos
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
         }
-      } catch {
-        thumbnails = prod.fotos
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean);
       }
-      if (!Array.isArray(thumbnails)) thumbnails = [];
-      const mainImage = thumbnails[0] || "/assets/placeholder.png";
+
+      const mainImage =
+        thumbnails.length > 0
+          ? thumbnails[0]
+          : "https://via.placeholder.com/400x400?text=Sem+Imagem";
 
       return {
         id: prod.id,
-        title: prod.produto_nome,
-        price: `R$ ${parseFloat(prod.preco).toFixed(2)}`,
+        title: prod.title,
+        price: `R$ ${parseFloat(prod.price).toFixed(2)}`,
         mainImage,
         thumbnails,
-        stock: prod.quantidade > 0,
-        quantidade: prod.quantidade,
-        // ► NOVO campo:
-        comercioNome: prod.comercio_nome,
+        barcode: prod.barcode,
+        marca: prod.marca,
+        comercio: {
+          nome: prod.comercioNome,
+        },
       };
     });
 
-    return res.json(list);
+    res.json(produtos);
   } catch (err) {
     console.error("Erro ao listar produtos:", err);
-    return res.status(500).json({ error: "Erro interno" });
+    res.status(500).json({ error: "Erro ao listar produtos" });
   }
 };
 
-exports.getByCategoria = async (req, res) => {
+exports.getProductsByCategory = async (req, res) => {
   const { categoriaId } = req.params;
   try {
     const [rows] = await pool.query(

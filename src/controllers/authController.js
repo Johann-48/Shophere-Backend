@@ -125,17 +125,17 @@ exports.signup = async (req, res) => {
 exports.updateUserProfile = async (req, res) => {
   try {
     const userId = req.userId; // preenchido pelo middleware
-    const { nome, email, telefone } = req.body;
+    const { nome, email, telefone, cidade } = req.body;
 
     // Atualiza no banco
     await pool.query(
-      "UPDATE usuarios SET nome = ?, email = ?, telefone = ? WHERE id = ?",
-      [nome, email, telefone, userId]
+      "UPDATE usuarios SET nome = ?, email = ?, telefone = ?, cidade = ? WHERE id = ?",
+      [nome, email, telefone, cidade, userId]
     );
 
     // Retorna o usuário atualizado
     const [rows] = await pool.query(
-      "SELECT id, nome, email, telefone FROM usuarios WHERE id = ?",
+      "SELECT id, nome, email, telefone, cidade FROM usuarios WHERE id = ?",
       [userId]
     );
     return res.json(rows[0]);

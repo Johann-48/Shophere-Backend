@@ -42,15 +42,16 @@ exports.signupCommerce = async (req, res) => {
   }
 };
 
-// Listar todos os comércios (opcional)
+// Listar todos os comércios
 exports.getAllCommerces = async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT
          id,
-         nome          AS name,
-         descricao     AS description,
-         fotos      AS logoUrl
+         nome AS name,
+         descricao AS description,
+         fotos AS logoUrl,
+         endereco AS address
        FROM comercios
        ORDER BY nome`
     );
@@ -61,15 +62,17 @@ exports.getAllCommerces = async (req, res) => {
   }
 };
 
+// Detalhes de 1 comércio
 exports.getCommerceById = async (req, res) => {
   const { id } = req.params;
   try {
     const [rows] = await pool.query(
       `SELECT
          id,
-         nome          AS name,
-         descricao     AS description,
-         fotos      AS logoUrl
+         nome AS name,
+         descricao AS description,
+         fotos AS logoUrl,
+         endereco AS address
        FROM comercios
        WHERE id = ?`,
       [id]
@@ -84,14 +87,16 @@ exports.getCommerceById = async (req, res) => {
   }
 };
 
+// Busca por nome (opcional)
 exports.searchCommerces = async (req, res) => {
   const q = req.query.q || "";
   try {
     const [rows] = await pool.query(
-      `SELECT 
+      `SELECT
          id,
          nome AS name,
-         fotos AS logoUrl
+         fotos AS logoUrl,
+         endereco AS address
        FROM comercios
        WHERE nome LIKE ?
        ORDER BY nome`,
