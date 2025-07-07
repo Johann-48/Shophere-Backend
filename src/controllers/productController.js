@@ -12,8 +12,7 @@ exports.getProductById = async (req, res) => {
          p.marca,
          p.nome            AS produto_nome,
          p.preco,
-         p.fotos,
-         p.codigo_barras   AS barcode,        -- já selecionado
+         p.codigo_barras   AS barcode,
          p.quantidade,
          p.comercio_id,
          c.nome            AS comercio_nome,
@@ -24,13 +23,11 @@ exports.getProductById = async (req, res) => {
        WHERE p.id = ?`,
       [id]
     );
-
-    if (rows.length === 0) {
+    if (rows.length === 0)
       return res.status(404).json({ error: "Produto não encontrado" });
-    }
     const prod = rows[0];
 
-    // 2. Buscar categorias associadas
+    // 2. Buscar categorias
     const [catRows] = await pool.query(
       `SELECT c.id, c.nome 
        FROM categorias c
@@ -39,26 +36,22 @@ exports.getProductById = async (req, res) => {
       [id]
     );
 
-    // 3. Processar imagens
-    let thumbnails = [];
-    if (typeof prod.fotos === "string" && prod.fotos.trim() !== "") {
-      try {
-        const parsed = JSON.parse(prod.fotos);
-        thumbnails = Array.isArray(parsed) ? parsed : [];
-      } catch {
-        thumbnails = prod.fotos
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean);
-      }
-    }
+    // 3. Buscar todas as fotos daquele produto
+    const [fotoRows] = await pool.query(
+      `SELECT url, principal 
+       FROM fotos_produto 
+       WHERE produto_id = ? 
+       ORDER BY principal DESC, id ASC`,
+      [id]
+    );
+    const thumbnails = fotoRows.map((f) => f.url);
     const mainImage =
-      thumbnails.length > 0
-        ? thumbnails[0]
-        : "https://via.placeholder.com/400x400?text=Sem+Imagem";
+      (fotoRows.find((f) => f.principal) || {}).url ||
+      thumbnails[0] ||
+      "https://via.placeholder.com/400x400?text=Sem+Imagem";
 
-    // 4. Monta resposta
-    const produtoResponse = {
+    // 4. Montar e enviar resposta
+    return res.json({
       id: prod.id,
       title: prod.produto_nome,
       price: `R$ ${parseFloat(prod.preco).toFixed(2)}`,
@@ -69,20 +62,14 @@ exports.getProductById = async (req, res) => {
       stock: prod.quantidade > 0,
       quantidade: prod.quantidade,
       categorias: catRows.map((c) => c.nome),
-
-      // ◾ Aqui adicionamos o código de barras:
       barcode: prod.barcode,
-
-      // ◾ Dados do comércio
       comercio: {
         id: prod.comercio_id,
         nome: prod.comercio_nome,
         telefone: prod.comercio_telefone,
         endereco: prod.comercio_endereco,
       },
-    };
-
-    return res.json(produtoResponse);
+    });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Erro interno" });
@@ -92,56 +79,58 @@ exports.getProductById = async (req, res) => {
 // ✅ GET /api/products
 exports.listProducts = async (req, res) => {
   try {
-    const [rows] = await pool.query(`
+    // 1. Puxar todos os produtos + nome do comércio
+    const [produtos] = await pool.query(`
       SELECT 
         p.id,
         p.nome AS title,
         p.preco AS price,
-        p.fotos AS fotos,
-        p.codigo_barras AS barcode,
         p.marca,
+        p.codigo_barras AS barcode,
         c.nome AS comercioNome
       FROM produtos p
       JOIN comercios c ON c.id = p.comercio_id
     `);
 
-    const produtos = rows.map((prod) => {
-      let thumbnails = [];
+    if (produtos.length === 0) return res.json([]);
 
-      if (prod.fotos) {
-        try {
-          thumbnails = JSON.parse(prod.fotos);
-        } catch {
-          thumbnails = prod.fotos
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean);
-        }
-      }
+    // 2. Buscar todas as fotos de uma vez
+    const ids = produtos.map((p) => p.id);
+    const [fotos] = await pool.query(
+      `SELECT produto_id, url, principal
+       FROM fotos_produto
+       WHERE produto_id IN (?)
+       ORDER BY principal DESC, id ASC`,
+      [ids]
+    );
+
+    // 3. Montar array final
+    const result = produtos.map((prod) => {
+      const fotosDoProduto = fotos
+        .filter((f) => f.produto_id === prod.id)
+        .map((f) => f.url);
 
       const mainImage =
-        thumbnails.length > 0
-          ? thumbnails[0]
+        fotosDoProduto.length > 0
+          ? fotosDoProduto[0]
           : "https://via.placeholder.com/400x400?text=Sem+Imagem";
 
       return {
         id: prod.id,
         title: prod.title,
         price: `R$ ${parseFloat(prod.price).toFixed(2)}`,
-        mainImage,
-        thumbnails,
-        barcode: prod.barcode,
         marca: prod.marca,
-        comercio: {
-          nome: prod.comercioNome,
-        },
+        barcode: prod.barcode,
+        mainImage,
+        thumbnails: fotosDoProduto,
+        comercio: { nome: prod.comercioNome },
       };
     });
 
-    res.json(produtos);
+    return res.json(result);
   } catch (err) {
     console.error("Erro ao listar produtos:", err);
-    res.status(500).json({ error: "Erro ao listar produtos" });
+    return res.status(500).json({ error: "Erro ao listar produtos" });
   }
 };
 
@@ -271,5 +260,28 @@ exports.getProductsByBarcode = async (req, res) => {
   } catch (err) {
     console.error("Erro ao buscar produtos por código de barras:", err);
     res.status(500).json({ message: "Erro interno ao buscar produtos." });
+  }
+};
+
+// POST /api/products
+exports.createProduct = async (req, res) => {
+  const { nome, preco, categoria, descricao } = req.body;
+  const comercioId = req.user.id; // vem do middleware
+
+  if (!nome || !preco) {
+    return res.status(400).json({ error: "Nome e preço são obrigatórios" });
+  }
+  try {
+    const [result] = await pool.query(
+      `INSERT INTO produtos (nome, preco, fotos, codigo_barras, descricao, comercio_id)
+       VALUES (?, ?, NULL, NULL, ?, ?)`,
+      [nome, preco, descricao || null, comercioId]
+    );
+    return res
+      .status(201)
+      .json({ id: result.insertId, message: "Produto criado" });
+  } catch (err) {
+    console.error("Erro ao criar produto:", err);
+    return res.status(500).json({ error: "Erro interno ao criar produto" });
   }
 };
