@@ -77,40 +77,31 @@ exports.login = async (req, res) => {
   }
 };
 
-exports.getUserProfile = async (req, res) => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) return res.status(401).json({ error: "Token não fornecido" });
-
-  let decoded;
-  try {
-    decoded = jwt.verify(token, process.env.JWT_SECRET);
-  } catch {
-    return res.status(401).json({ error: "Token inválido" });
-  }
+exports.getMyProfile = async (req, res) => {
+  const userId = req.userId;
+  const userRole = req.userRole;
 
   try {
     let rows;
-    if (decoded.role === "commerce") {
-      // se for comércio, busca na tabela comercios
+    if (userRole === "commerce") {
       [rows] = await pool.query(
-        "SELECT id, nome AS nome, email, telefone FROM comercios WHERE id = ?",
-        [decoded.id]
+        "SELECT id, nome, email, telefone, endereco FROM comercios WHERE id = ?",
+        [userId]
       );
     } else {
-      // se for usuário normal, busca na tabela usuarios
       [rows] = await pool.query(
-        "SELECT id, nome, email, telefone FROM usuarios WHERE id = ?",
-        [decoded.id]
+        "SELECT id, nome, email, telefone, cidade FROM usuarios WHERE id = ?",
+        [userId]
       );
     }
 
-    if (rows.length === 0)
-      return res.status(404).json({ error: "Perfil não encontrado" });
-
+    if (!rows.length) {
+      return res.status(404).json({ error: "Perfil não encontrado." });
+    }
     return res.json(rows[0]);
   } catch (err) {
     console.error("Erro ao buscar perfil:", err);
-    return res.status(500).json({ error: "Erro interno ao buscar perfil" });
+    return res.status(500).json({ error: "Erro interno ao buscar perfil." });
   }
 };
 
@@ -140,7 +131,7 @@ exports.signup = async (req, res) => {
   }
 };
 
-exports.updateUserProfile = async (req, res) => {
+exports.updateMyProfile = async (req, res) => {
   try {
     const userId = req.userId; // preenchido pelo middleware
     const { nome, email, telefone, cidade } = req.body;

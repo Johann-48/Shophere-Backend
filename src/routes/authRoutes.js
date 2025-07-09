@@ -14,6 +14,7 @@ router.post("/signup", authController.signup);
 router.post("/signup-commerce", signupCommerce);
 
 // GET /api/auth/me — retorna perfil (precisa de token)
-router.get("/me", requireAuth, authController.getUserProfile);
+router.get("/me", requireAuth, authController.getMyProfile);
+router.put("/me", requireAuth, authController.updateMyProfile);
 
 module.exports = router;

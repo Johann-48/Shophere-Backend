@@ -108,3 +108,47 @@ exports.searchCommerces = async (req, res) => {
     res.status(500).json({ error: "Erro ao buscar comércios" });
   }
 };
+
+// GET /api/commerces/me
+exports.getMyCommerce = async (req, res) => {
+  const comercioId = req.userId;
+  try {
+    const [rows] = await pool.query(
+      `SELECT
+         id,
+         nome,
+         descricao,
+         fotos      AS logoUrl,
+         endereco
+       FROM comercios
+       WHERE id = ?`,
+      [comercioId]
+    );
+    if (!rows.length) {
+      return res.status(404).json({ error: "Loja não encontrada." });
+    }
+    res.json(rows[0]);
+  } catch (err) {
+    console.error("Erro ao buscar dados da loja:", err);
+    res.status(500).json({ error: "Erro interno" });
+  }
+};
+
+// PUT /api/commerces/me
+exports.updateCommerce = async (req, res) => {
+  const comercioId = req.userId;
+  const { nome, endereco, logoUrl, descricao } = req.body;
+  try {
+    await pool.query(
+      `UPDATE comercios
+         SET nome = ?, endereco = ?, fotos = ?, descricao = ?
+       WHERE id = ?`,
+      [nome, endereco, logoUrl, descricao, comercioId]
+    );
+    // opcional: retornar dados atualizados
+    res.json({ message: "Loja atualizada com sucesso." });
+  } catch (err) {
+    console.error("Erro ao atualizar loja:", err);
+    res.status(500).json({ error: "Erro interno" });
+  }
+};

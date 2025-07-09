@@ -317,3 +317,92 @@ exports.createProduct = async (req, res) => {
       .json({ error: "Erro interno ao criar produto", details: err.message });
   }
 };
+
+// GET /api/produtos/meus
+exports.getMyProducts = async (req, res) => {
+  const comercioId = req.userId;
+  try {
+    const [rows] = await pool.query(
+      `SELECT 
+         id,
+         nome,
+         preco,
+         descricao,
+         marca,
+         quantidade,
+         codigo_barras AS barcode,
+         fotos
+       FROM produtos
+       WHERE comercio_id = ?`,
+      [comercioId]
+    );
+
+    // Converte preco de string para número em todos os itens
+    const produtos = rows.map((p) => ({
+      ...p,
+      preco: parseFloat(p.preco),
+    }));
+
+    res.json(produtos);
+  } catch (err) {
+    console.error("Erro ao buscar meus produtos:", err);
+    res.status(500).json({ error: "Erro interno" });
+  }
+};
+
+// PUT /api/produtos/:id
+exports.updateProduct = async (req, res) => {
+  const { id } = req.params;
+  const comercioId = req.userId;
+  const {
+    nome,
+    preco,
+    descricao,
+    marca,
+    quantidade,
+    codigoBarras,
+    codigo_barras,
+  } = req.body;
+  const barcode = codigoBarras || codigo_barras || null;
+
+  try {
+    // opcional: checar se o produto pertence a este comércio
+    await pool.query(
+      `UPDATE produtos
+         SET nome = ?, preco = ?, descricao = ?, marca = ?, quantidade = ?, codigo_barras = ?
+       WHERE id = ? AND comercio_id = ?`,
+      [nome, preco, descricao, marca, quantidade, barcode, id, comercioId]
+    );
+
+    const [rows] = await pool.query(
+      `SELECT id, nome, preco, descricao, marca, quantidade, codigo_barras AS barcode, fotos
+   FROM produtos
+   WHERE id = ?`,
+      [id]
+    );
+    const atualizado = rows[0];
+    atualizado.preco = parseFloat(atualizado.preco);
+
+    res.json(atualizado);
+  } catch (err) {
+    console.error("Erro ao atualizar produto:", err);
+    res.status(500).json({ error: "Erro interno" });
+  }
+};
+
+// DELETE /api/produtos/:id
+exports.deleteProduct = async (req, res) => {
+  const { id } = req.params;
+  const comercioId = req.userId;
+  try {
+    await pool.query(
+      `DELETE FROM produtos
+       WHERE id = ? AND comercio_id = ?`,
+      [id, comercioId]
+    );
+    res.json({ message: "Produto excluído" });
+  } catch (err) {
+    console.error("Erro ao excluir produto:", err);
+    res.status(500).json({ error: "Erro interno" });
+  }
+};
