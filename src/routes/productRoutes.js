@@ -1,9 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const productController = require("../controllers/productController");
-const { requireCommerce } = require("../middleware/auth");
+const { requireAuth, requireCommerce } = require("../middleware/auth");
 
-router.post("/", requireCommerce, productController.createProduct);
+router.post("/", requireAuth, requireCommerce, productController.createProduct);
 router.get("/search", productController.searchProducts);
 router.get("/categoria/:categoriaId", productController.getProductsByCategory);
 router.get("/commerce/:id", productController.getProductsByCommerce);

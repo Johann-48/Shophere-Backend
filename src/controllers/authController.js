@@ -81,18 +81,36 @@ exports.getUserProfile = async (req, res) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) return res.status(401).json({ error: "Token não fornecido" });
 
+  let decoded;
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const [rows] = await pool.query(
-      "SELECT id, nome, email, telefone FROM usuarios WHERE id = ?",
-      [decoded.id]
-    );
-    if (rows.length === 0)
-      return res.status(404).json({ error: "Usuário não encontrado" });
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch {
+    return res.status(401).json({ error: "Token inválido" });
+  }
 
-    res.json(rows[0]);
+  try {
+    let rows;
+    if (decoded.role === "commerce") {
+      // se for comércio, busca na tabela comercios
+      [rows] = await pool.query(
+        "SELECT id, nome AS nome, email, telefone FROM comercios WHERE id = ?",
+        [decoded.id]
+      );
+    } else {
+      // se for usuário normal, busca na tabela usuarios
+      [rows] = await pool.query(
+        "SELECT id, nome, email, telefone FROM usuarios WHERE id = ?",
+        [decoded.id]
+      );
+    }
+
+    if (rows.length === 0)
+      return res.status(404).json({ error: "Perfil não encontrado" });
+
+    return res.json(rows[0]);
   } catch (err) {
-    res.status(401).json({ error: "Token inválido" });
+    console.error("Erro ao buscar perfil:", err);
+    return res.status(500).json({ error: "Erro interno ao buscar perfil" });
   }
 };
 

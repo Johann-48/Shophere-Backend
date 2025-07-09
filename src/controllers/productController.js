@@ -265,23 +265,55 @@ exports.getProductsByBarcode = async (req, res) => {
 
 // POST /api/products
 exports.createProduct = async (req, res) => {
-  const { nome, preco, categoria, descricao } = req.body;
-  const comercioId = req.user.id; // vem do middleware
+  const {
+    nome,
+    preco,
+    descricao,
+    marca,
+    quantidade,
+    codigoBarras,
+    codigo_barras,
+  } = req.body;
+
+  const codigoBarrasFinal = codigoBarras || codigo_barras || null;
+
+  const comercioId = req.userId;
+
+  console.log("Dados recebidos:", {
+    nome,
+    preco,
+    descricao,
+    marca,
+    quantidade,
+    codigoBarrasFinal,
+  });
 
   if (!nome || !preco) {
     return res.status(400).json({ error: "Nome e preço são obrigatórios" });
   }
+
   try {
     const [result] = await pool.query(
-      `INSERT INTO produtos (nome, preco, fotos, codigo_barras, descricao, comercio_id)
-       VALUES (?, ?, NULL, NULL, ?, ?)`,
-      [nome, preco, descricao || null, comercioId]
+      `INSERT INTO produtos (nome, preco, descricao, marca, quantidade, codigo_barras, fotos, comercio_id)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`,
+      [
+        nome,
+        preco,
+        descricao || null,
+        marca || null,
+        quantidade || null,
+        codigoBarrasFinal,
+        comercioId,
+      ]
     );
+
     return res
       .status(201)
       .json({ id: result.insertId, message: "Produto criado" });
   } catch (err) {
     console.error("Erro ao criar produto:", err);
-    return res.status(500).json({ error: "Erro interno ao criar produto" });
+    return res
+      .status(500)
+      .json({ error: "Erro interno ao criar produto", details: err.message });
   }
 };
