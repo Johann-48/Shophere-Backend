@@ -168,3 +168,31 @@ exports.uploadProfileImage = async (req, res) => {
     res.status(500).json({ error: "Erro ao salvar imagem" });
   }
 };
+
+// Exemplo no authController.js
+exports.changePassword = async (req, res) => {
+  const { senhaAtual, novaSenha } = req.body;
+  const userId = req.userId;
+
+  try {
+    const [rows] = await pool.query("SELECT senha FROM usuarios WHERE id = ?", [
+      userId,
+    ]);
+    const usuario = rows[0];
+
+    const senhaCorreta = await bcrypt.compare(senhaAtual, usuario.senha);
+    if (!senhaCorreta) {
+      return res.status(400).json({ message: "Senha atual incorreta." });
+    }
+
+    const senhaHash = await bcrypt.hash(novaSenha, 10);
+    await pool.query("UPDATE usuarios SET senha = ? WHERE id = ?", [
+      senhaHash,
+      userId,
+    ]);
+
+    res.json({ message: "Senha alterada com sucesso." });
+  } catch (error) {
+    res.status(500).json({ message: "Erro interno." });
+  }
+};

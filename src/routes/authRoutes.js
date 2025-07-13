@@ -12,6 +12,7 @@ router.post("/login", authController.login);
 router.post("/signup", authController.signup);
 
 router.post("/signup-commerce", signupCommerce);
+router.put("/change-password", requireAuth, authController.changePassword);
 
 // GET /api/auth/me — retorna perfil (precisa de token)
 router.get("/me", requireAuth, authController.getMyProfile);
