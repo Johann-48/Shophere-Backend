@@ -50,6 +50,36 @@ exports.getProductById = async (req, res) => {
       thumbnails[0] ||
       "https://via.placeholder.com/400x400?text=Sem+Imagem";
 
+    const [avRows] = await pool.query(
+      `SELECT usuario_id, conteudo, nota
+   FROM avaliacoesproduto
+   WHERE produto_id = ?`,
+      [id]
+    );
+
+    // calcular média e quantidade
+    const reviewsCount = avRows.length;
+    const avgRating =
+      reviewsCount > 0
+        ? avRows.reduce((sum, r) => sum + r.nota, 0) / reviewsCount
+        : 0;
+
+    // opcional: buscar nome do usuário (se quiser mostrar quem avaliou)
+    const reviews = await Promise.all(
+      avRows.map(async (r) => {
+        // se tiver tabela de usuários:
+        const [[u]] = await pool.query(
+          `SELECT nome FROM usuarios WHERE id = ?`,
+          [r.usuario_id]
+        );
+        return {
+          user: u ? u.nome : `Usuário ${r.usuario_id}`,
+          note: r.nota,
+          content: r.conteudo,
+        };
+      })
+    );
+
     // 4. Montar e enviar resposta
     return res.json({
       id: prod.id,
@@ -69,6 +99,10 @@ exports.getProductById = async (req, res) => {
         telefone: prod.comercio_telefone,
         endereco: prod.comercio_endereco,
       },
+
+      stars: Math.round(avgRating), // para renderStars()
+      reviewsCount,
+      reviews,
     });
   } catch (err) {
     console.error(err);
@@ -79,17 +113,21 @@ exports.getProductById = async (req, res) => {
 // ✅ GET /api/products
 exports.listProducts = async (req, res) => {
   try {
-    // 1. Puxar todos os produtos + nome do comércio
+    // 1. Puxar todos os produtos + nome do comércio + média e contagem de avaliações
     const [produtos] = await pool.query(`
       SELECT 
         p.id,
-        p.nome AS title,
-        p.preco AS price,
+        p.nome            AS title,
+        p.preco           AS price,
         p.marca,
-        p.codigo_barras AS barcode,
-        c.nome AS comercioNome
+        p.codigo_barras   AS barcode,
+        c.nome            AS comercioNome,
+        COALESCE(AVG(a.nota), 0)  AS avgRating,
+        COALESCE(COUNT(a.id), 0)  AS reviewsCount
       FROM produtos p
       JOIN comercios c ON c.id = p.comercio_id
+      LEFT JOIN avaliacoesproduto a ON a.produto_id = p.id
+      GROUP BY p.id, p.nome, p.preco, p.marca, p.codigo_barras, c.nome
     `);
 
     if (produtos.length === 0) return res.json([]);
@@ -104,16 +142,16 @@ exports.listProducts = async (req, res) => {
       [ids]
     );
 
-    // 3. Montar array final
+    // 3. Montar array final, incluindo stars e reviewsCount
     const result = produtos.map((prod) => {
+      const avg = parseFloat(prod.avgRating); // converte a string em número
       const fotosDoProduto = fotos
         .filter((f) => f.produto_id === prod.id)
         .map((f) => f.url);
 
       const mainImage =
-        fotosDoProduto.length > 0
-          ? fotosDoProduto[0]
-          : "https://via.placeholder.com/400x400?text=Sem+Imagem";
+        fotosDoProduto[0] ||
+        "https://via.placeholder.com/400x400?text=Sem+Imagem";
 
       return {
         id: prod.id,
@@ -124,6 +162,11 @@ exports.listProducts = async (req, res) => {
         mainImage,
         thumbnails: fotosDoProduto,
         comercio: { nome: prod.comercioNome },
+
+        // aqui, com parseFloat antes de toFixed:
+        avgRating: Number(avg.toFixed(2)), // ex: 4.33
+        stars: Math.round(avg), // ex: 4
+        reviewsCount: prod.reviewsCount,
       };
     });
 
