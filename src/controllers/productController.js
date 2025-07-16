@@ -102,6 +102,8 @@ exports.getProductById = async (req, res) => {
       stars: Math.round(avgRating), // para renderStars()
       reviewsCount,
       reviews,
+
+      categoria_id: catRows[0]?.id || null,
     });
   } catch (err) {
     console.error(err);
@@ -179,9 +181,10 @@ exports.listProducts = async (req, res) => {
 exports.getProductsByCategory = async (req, res) => {
   const { categoriaId } = req.params;
   try {
-    const [rows] = await pool.query(
+    // 1. Buscar produtos da categoria
+    const [produtos] = await pool.query(
       `
-      SELECT p.id, p.marca, p.nome, p.preco, p.fotos, p.codigo_barras
+      SELECT p.id, p.marca, p.nome, p.preco, p.codigo_barras
       FROM produtos p
       JOIN produtos_categorias pc ON pc.produto_id = p.id
       WHERE pc.categoria_id = ?
@@ -189,41 +192,47 @@ exports.getProductsByCategory = async (req, res) => {
       [categoriaId]
     );
 
-    const produtos = rows.map((prod) => {
-      let thumbnails = [];
-      if (prod.fotos) {
-        try {
-          thumbnails = JSON.parse(prod.fotos);
-        } catch {
-          thumbnails = prod.fotos
-            .split(",")
-            .map((s) => s.trim())
-            .filter((s) => s);
-        }
-      }
+    if (produtos.length === 0) return res.json([]);
+
+    // 2. Buscar as imagens da tabela fotos_produto
+    const ids = produtos.map((p) => p.id);
+    const [fotos] = await pool.query(
+      `
+      SELECT produto_id, url, principal
+      FROM fotos_produto
+      WHERE produto_id IN (?)
+      ORDER BY principal DESC, id ASC
+      `,
+      [ids]
+    );
+
+    // 3. Montar os dados finais
+    const result = produtos.map((prod) => {
+      const fotosDoProduto = fotos
+        .filter((f) => f.produto_id === prod.id)
+        .map((f) => f.url);
 
       const mainImage =
-        thumbnails.length > 0
-          ? thumbnails[0]
-          : "https://via.placeholder.com/400x400?text=Sem+Imagem";
+        fotosDoProduto[0] ||
+        "https://via.placeholder.com/400x400?text=Sem+Imagem";
 
       return {
         id: prod.id,
         title: prod.nome,
         price: `R$ ${parseFloat(prod.preco).toFixed(2)}`,
         mainImage,
-        thumbnails,
+        thumbnails: fotosDoProduto,
         marca: prod.marca,
         codigo_barras: prod.codigo_barras,
         description: prod.marca
           ? `Produto da marca ${prod.marca}`
           : "Descrição não disponível",
         stock: true,
-        stars: 0,
+        stars: 0, // opcional: você pode adicionar as médias depois
       };
     });
 
-    return res.json(produtos);
+    return res.json(result);
   } catch (error) {
     console.error("Erro ao buscar produtos por categoria:", error);
     return res
