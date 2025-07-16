@@ -13,6 +13,7 @@ const productRoutes = require("./routes/productRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
 const commerceRoutes = require("./routes/commerceRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
+const avaliacoesRouter = require("./routes/avaliacaoProduto.routes");
 
 const app = express();
 
@@ -40,6 +41,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/commerces", commerceRoutes);
+app.use("/api/avaliacoes", avaliacoesRouter);
 
 // Para o upload de fotos de produto, passe o middleware `upload` direto aqui
 // Assim você não precisa de um arquivo uploadRoutes separado, mas se quiser manter,

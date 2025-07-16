@@ -50,10 +50,18 @@ exports.getProductById = async (req, res) => {
       thumbnails[0] ||
       "https://via.placeholder.com/400x400?text=Sem+Imagem";
 
+    // 3. Buscar todas as avaliações já com nome de usuário
     const [avRows] = await pool.query(
-      `SELECT usuario_id, conteudo, nota
-   FROM avaliacoesproduto
-   WHERE produto_id = ?`,
+      `SELECT 
+      a.id,
+      a.conteudo      AS content,
+      a.nota          AS note,
+      u.nome          AS user
+    FROM avaliacoesproduto a
+    JOIN usuarios u ON u.id = a.usuario_id
+    WHERE a.produto_id = ?
+    ORDER BY a.id DESC
+  `,
       [id]
     );
 
@@ -61,24 +69,15 @@ exports.getProductById = async (req, res) => {
     const reviewsCount = avRows.length;
     const avgRating =
       reviewsCount > 0
-        ? avRows.reduce((sum, r) => sum + r.nota, 0) / reviewsCount
+        ? avRows.reduce((sum, r) => sum + r.note, 0) / reviewsCount
         : 0;
 
-    // opcional: buscar nome do usuário (se quiser mostrar quem avaliou)
-    const reviews = await Promise.all(
-      avRows.map(async (r) => {
-        // se tiver tabela de usuários:
-        const [[u]] = await pool.query(
-          `SELECT nome FROM usuarios WHERE id = ?`,
-          [r.usuario_id]
-        );
-        return {
-          user: u ? u.nome : `Usuário ${r.usuario_id}`,
-          note: r.nota,
-          content: r.conteudo,
-        };
-      })
-    );
+    // agora já temos o array de reviews pronto:
+    const reviews = avRows.map((r) => ({
+      user: r.user,
+      note: r.note,
+      content: r.content,
+    }));
 
     // 4. Montar e enviar resposta
     return res.json({
