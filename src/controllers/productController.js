@@ -244,20 +244,24 @@ exports.getProductsByCategory = async (req, res) => {
 exports.searchProducts = async (req, res) => {
   const q = req.query.q || "";
   try {
-    const sql = `
+    const [rows] = await pool.query(
+      `
       SELECT 
         p.id,
         p.nome      AS name,
         p.preco     AS price,
         p.descricao AS description,
-        p.fotos AS mainImage,
+        fp.url      AS mainImage,
         c.nome      AS comercioNome
       FROM produtos p
-      LEFT JOIN comercios c ON p.comercio_id = c.id
+      LEFT JOIN comercios c ON c.id = p.comercio_id
+      LEFT JOIN fotos_produto fp
+        ON fp.produto_id = p.id AND fp.principal = 1
       WHERE p.nome LIKE ?
       LIMIT 50
-    `;
-    const [rows] = await pool.query(sql, [`%${q}%`]);
+    `,
+      [`%${q}%`]
+    );
     res.json({ products: rows });
   } catch (err) {
     console.error("Erro na busca:", err);
@@ -270,15 +274,18 @@ exports.getProductsByCommerce = async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT 
-         p.id,
-         p.nome        AS name,
-         p.preco       AS price,
-         p.descricao   AS description,
-         p.fotos       AS mainImage,    /* se for JSON, ou p.fotos se for string */
-         c.nome        AS comercioNome
-       FROM produtos p
-       LEFT JOIN comercios c ON p.comercio_id = c.id
-       WHERE p.comercio_id = ?`,
+    p.id,
+    p.nome        AS name,
+    p.preco       AS price,
+    p.descricao   AS description,
+    fp.url        AS mainImage,
+    c.nome        AS comercioNome
+  FROM produtos p
+  LEFT JOIN comercios c ON p.comercio_id = c.id
+  LEFT JOIN fotos_produto fp
+    ON fp.produto_id = p.id AND fp.principal = 1
+  WHERE p.comercio_id = ?
+  `,
       [id]
     );
     res.json({ products: rows });
@@ -294,17 +301,18 @@ exports.getProductsByBarcode = async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT 
-         p.id,
-         p.nome AS name,
-         p.preco AS price,
-         p.descricao AS description,
-         p.fotos AS mainImage,
-         p.codigo_barras AS barcode,
-         c.nome AS comercioNome,
-         c.id AS comercioId
-       FROM produtos p
-       LEFT JOIN comercios c ON p.comercio_id = c.id
-       WHERE p.codigo_barras = ?`,
+    p.id,
+    p.nome        AS name,
+    p.preco       AS price,
+    p.descricao   AS description,
+    fp.url        AS mainImage,
+    c.nome        AS comercioNome
+  FROM produtos p
+  LEFT JOIN comercios c ON p.comercio_id = c.id
+  LEFT JOIN fotos_produto fp
+    ON fp.produto_id = p.id AND fp.principal = 1
+  WHERE p.comercio_id = ?
+  `,
       [codigo]
     );
     res.json(rows);
