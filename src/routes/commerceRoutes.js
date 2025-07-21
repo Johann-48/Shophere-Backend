@@ -12,5 +12,6 @@ router.post("/signup", controller.signupCommerce);
 router.get("/search", controller.searchCommerces);
 router.get("/", controller.getAllCommerces);
 router.get("/:id", controller.getCommerceById);
+router.get("/lojas", controller.listCommerces);
 
 module.exports = router;

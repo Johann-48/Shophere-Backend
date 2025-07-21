@@ -352,23 +352,25 @@ exports.createProduct = async (req, res) => {
   }
 
   try {
+    // em ProductController.createProduct, depois de inserir em produtos:
     const [result] = await pool.query(
       `INSERT INTO produtos (nome, preco, descricao, marca, quantidade, codigo_barras, fotos, comercio_id)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`,
-      [
-        nome,
-        preco,
-        descricao || null,
-        marca || null,
-        quantidade || null,
-        codigoBarrasFinal,
-        comercioId,
-      ]
+   VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`,
+      [nome, preco, descricao, marca, quantidade, codigoBarrasFinal, comercioId]
     );
 
-    return res
-      .status(201)
-      .json({ id: result.insertId, message: "Produto criado" });
+    const produtoId = result.insertId;
+
+    // 2) **GRAVAR** categoria, se veio do front‑end
+    if (req.body.categoria_id) {
+      await pool.query(
+        `INSERT INTO produtos_categorias (produto_id, categoria_id)
+     VALUES (?, ?)`,
+        [produtoId, req.body.categoria_id]
+      );
+    }
+
+    return res.status(201).json({ id: produtoId, message: "Produto criado" });
   } catch (err) {
     console.error("Erro ao criar produto:", err);
     return res
@@ -383,25 +385,22 @@ exports.getMyProducts = async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT 
-         id,
-         nome,
-         preco,
-         descricao,
-         marca,
-         quantidade,
-         codigo_barras AS barcode,
-         fotos
-       FROM produtos
-       WHERE comercio_id = ?`,
+         p.id,
+         p.nome,
+         p.preco,
+         p.descricao,
+         p.marca,
+         p.quantidade,
+         p.codigo_barras AS barcode,
+         c.id          AS categoria_id,
+         c.nome        AS categoria
+       FROM produtos p
+       LEFT JOIN produtos_categorias pc ON pc.produto_id = p.id
+       LEFT JOIN categorias c         ON c.id = pc.categoria_id
+       WHERE p.comercio_id = ?`,
       [comercioId]
     );
-
-    // Converte preco de string para número em todos os itens
-    const produtos = rows.map((p) => ({
-      ...p,
-      preco: parseFloat(p.preco),
-    }));
-
+    const produtos = rows.map((p) => ({ ...p, preco: parseFloat(p.preco) }));
     res.json(produtos);
   } catch (err) {
     console.error("Erro ao buscar meus produtos:", err);
@@ -432,6 +431,19 @@ exports.updateProduct = async (req, res) => {
        WHERE id = ? AND comercio_id = ?`,
       [nome, preco, descricao, marca, quantidade, barcode, id, comercioId]
     );
+
+    if (req.body.categoria_id) {
+      // 1) Apaga relação antiga
+      await pool.query(`DELETE FROM produtos_categorias WHERE produto_id = ?`, [
+        id,
+      ]);
+      // 2) Insere a nova relação
+      await pool.query(
+        `INSERT INTO produtos_categorias (produto_id, categoria_id)
+     VALUES (?, ?)`,
+        [id, req.body.categoria_id]
+      );
+    }
 
     const [rows] = await pool.query(
       `SELECT id, nome, preco, descricao, marca, quantidade, codigo_barras AS barcode, fotos

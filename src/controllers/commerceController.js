@@ -152,3 +152,18 @@ exports.updateCommerce = async (req, res) => {
     res.status(500).json({ error: "Erro interno" });
   }
 };
+
+// **ao final de** src/controllers/commerceController.js
+
+// retorna [{ id, nome, imagem }] para o front‑end listar as lojas
+exports.listCommerces = async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      "SELECT id, nome, fotos AS imagem FROM comercios ORDER BY nome"
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error("Erro ao listar lojas:", err);
+    res.status(500).json({ error: "Erro interno ao listar lojas." });
+  }
+};
