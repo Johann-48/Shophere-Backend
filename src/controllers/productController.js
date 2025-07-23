@@ -122,7 +122,7 @@ exports.listProducts = async (req, res) => {
         p.preco           AS price,
         p.marca,
         p.codigo_barras   AS barcode,
-        c.nome            AS comercioNome,
+        c.nome            AS commerceName,
         COALESCE(AVG(a.nota), 0)  AS avgRating,
         COALESCE(COUNT(a.id), 0)  AS reviewsCount
       FROM produtos p
@@ -162,7 +162,7 @@ exports.listProducts = async (req, res) => {
         barcode: prod.barcode,
         mainImage,
         thumbnails: fotosDoProduto,
-        comercio: { nome: prod.comercioNome },
+        comercio: { nome: prod.commerceName },
 
         // aqui, com parseFloat antes de toFixed:
         avgRating: Number(avg.toFixed(2)), // ex: 4.33
@@ -252,7 +252,7 @@ exports.searchProducts = async (req, res) => {
         p.preco     AS price,
         p.descricao AS description,
         fp.url      AS mainImage,
-        c.nome      AS comercioNome
+        c.nome      AS commerceName
       FROM produtos p
       LEFT JOIN comercios c ON c.id = p.comercio_id
       LEFT JOIN fotos_produto fp
@@ -279,7 +279,7 @@ exports.getProductsByCommerce = async (req, res) => {
     p.preco       AS price,
     p.descricao   AS description,
     fp.url        AS mainImage,
-    c.nome        AS comercioNome
+    c.nome        AS commerceName
   FROM produtos p
   LEFT JOIN comercios c ON p.comercio_id = c.id
   LEFT JOIN fotos_produto fp
@@ -301,20 +301,22 @@ exports.getProductsByBarcode = async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT 
-    p.id,
-    p.nome        AS name,
-    p.preco       AS price,
-    p.descricao   AS description,
-    fp.url        AS mainImage,
-    c.nome        AS comercioNome
-  FROM produtos p
-  LEFT JOIN comercios c ON p.comercio_id = c.id
-  LEFT JOIN fotos_produto fp
-    ON fp.produto_id = p.id AND fp.principal = 1
-  WHERE p.comercio_id = ?
-  `,
+  p.id,
+  p.nome AS name,
+  p.preco AS price,
+  p.descricao AS description,
+  p.codigo_barras AS barcode,
+  CONCAT('http://localhost:4000/uploads/', fp.url) AS mainImage,
+  c.nome AS commerceName
+FROM produtos p
+LEFT JOIN comercios c ON p.comercio_id = c.id
+LEFT JOIN fotos_produto fp ON fp.produto_id = p.id AND fp.principal = 1
+WHERE p.codigo_barras = ?
+
+      `,
       [codigo]
     );
+
     res.json(rows);
   } catch (err) {
     console.error("Erro ao buscar produtos por código de barras:", err);

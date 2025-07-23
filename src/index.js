@@ -46,6 +46,8 @@ app.use("/api/avaliacoes", avaliacoesRouter);
 app.use("/api/chats", require("./routes/chatRoutes"));
 app.use("/api/chats/:chatId/mensagens", require("./routes/mensagemRoutes"));
 app.use("/api/upload", uploadRoutes); // Inclui upload de áudio
+// src/index.js — logo abaixo de app.use("/api/upload", uploadRoutes);
+app.use("/api/upload/image", require("./routes/imageUploadRoutes"));
 
 // 5) Upload de imagem de produto
 const storage = multer.diskStorage({
