@@ -66,6 +66,21 @@ exports.login = async (req, res) => {
       expiresIn: process.env.JWT_EXPIRES_IN || "1d",
     });
 
+    // 1) Coleto informações do dispositivo e IP
+    const deviceInfo = req.headers["user-agent"] || null;
+    const ip = req.ip;
+
+    // 2) Calculo data de expiração (espelho do expiresIn)
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24); // 1 dia
+
+    // 3) Insiro na tabela sessions
+    await pool.query(
+      `INSERT INTO sessions
+        (user_id, token, device_info, ip, expires_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      [payload.id, token, deviceInfo, ip, expiresAt]
+    );
+
     return res.json({
       message: "Autenticação realizada com sucesso.",
       token,

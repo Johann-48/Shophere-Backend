@@ -1,7 +1,8 @@
 // src/middleware/auth.js
 const jwt = require("jsonwebtoken");
+const pool = require("../config/db"); // ← importe seu pool
 
-exports.requireAuth = (req, res, next) => {
+exports.requireAuth = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
     return res.status(401).json({ error: "Token não fornecido" });
@@ -13,21 +14,38 @@ exports.requireAuth = (req, res, next) => {
   }
 
   try {
+    // 1) Verifica a assinatura e expiração do JWT
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    // Verifica se veio o role
     if (!payload.role) {
       return res.status(401).json({ error: "Role não presente no token" });
     }
+
+    // 2) Checa na tabela `sessions` se esta sessão/token é válida
+    const [rows] = await pool.query(
+      `SELECT 1
+         FROM sessions
+        WHERE user_id = ? 
+          AND token = ?
+          AND expires_at > NOW()
+        LIMIT 1`,
+      [payload.id, token]
+    );
+    if (rows.length === 0) {
+      return res.status(401).json({ error: "Sessão inválida ou expirada." });
+    }
+
+    // 3) Se tudo OK, anexa os dados ao req
     req.userId = payload.id;
     req.userRole = payload.role;
+    req.token = token;
     next();
   } catch (err) {
+    console.error("Auth middleware error:", err);
     return res.status(401).json({ error: "Token inválido ou expirado" });
   }
 };
 
 exports.requireCommerce = (req, res, next) => {
-  // assume que requireAuth já foi executado
   if (req.userRole !== "commerce") {
     return res
       .status(403)
