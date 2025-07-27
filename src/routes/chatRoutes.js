@@ -4,8 +4,13 @@ const router = express.Router();
 const { getOrCreateChat, listChats } = require("../controllers/chatController");
 
 router.get("/", (req, res, next) => {
-  const { clienteId, lojaId } = req.query;
-  if (clienteId && lojaId) return getOrCreateChat(req, res, next);
+  const { clienteId, lojaId, message } = req.query;
+
+  if (clienteId && lojaId) {
+    // passa message junto
+    req.query.initMessage = message;
+    return getOrCreateChat(req, res, next);
+  }
   if (lojaId) return listChats(req, res, next);
   return res.status(400).json({ error: "Faltam params clienteId ou lojaId" });
 });

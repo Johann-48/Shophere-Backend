@@ -1,28 +1,57 @@
+// GET /api/chats?clienteId=...&lojaId=...
+// controllers/chatController.js
 const pool = require("../config/db");
 
-// GET /api/chats?clienteId=...&lojaId=...
+// GET /api/chats?clienteId=...&lojaId=...&message=...
 exports.getOrCreateChat = async (req, res) => {
-  const { clienteId, lojaId } = req.query;
-  try {
-    // 1) Tenta buscar
-    const [[chat]] = await pool.query(
-      `SELECT * FROM chats WHERE cliente_id = ? AND loja_id = ?`,
-      [clienteId, lojaId]
-    );
-    if (chat) return res.json(chat);
+  const { clienteId, lojaId, initMessage } = req.query;
+  let chatId;
 
-    // 2) Se não existir, cria
-    const [result] = await pool.query(
-      `INSERT INTO chats (cliente_id, loja_id) VALUES (?, ?)`,
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // 1) Busca chat existente
+    const [[existing]] = await conn.query(
+      `SELECT id FROM chats WHERE cliente_id = ? AND loja_id = ?`,
       [clienteId, lojaId]
     );
-    const [newChat] = await pool.query(`SELECT * FROM chats WHERE id = ?`, [
-      result.insertId,
+
+    if (existing) {
+      chatId = existing.id;
+    } else {
+      // 2) Cria novo chat
+      const [insert] = await conn.query(
+        `INSERT INTO chats (cliente_id, loja_id, criado_em) VALUES (?, ?, NOW())`,
+        [clienteId, lojaId]
+      );
+      chatId = insert.insertId;
+    }
+
+    // 3) Se veio mensagem inicial, insere como primeira mensagem
+    if (initMessage) {
+      await conn.query(
+        `INSERT INTO mensagens 
+          (chat_id, remetente, tipo, conteudo, criado_em) 
+         VALUES (?, 'cliente', 'texto', ?, NOW())`,
+        [chatId, decodeURIComponent(initMessage)]
+      );
+    }
+
+    await conn.commit();
+
+    // 4) Busca e retorna o chat
+    const [[chat]] = await pool.query(`SELECT * FROM chats WHERE id = ?`, [
+      chatId,
     ]);
-    res.status(201).json(newChat[0]);
+    // se quiser, pode também retornar a lista de mensagens já com a inicial
+    res.status(existing ? 200 : 201).json(chat);
   } catch (err) {
-    console.error(err);
+    await conn.rollback();
+    console.error("Erro ao obter/criar chat:", err);
     res.status(500).json({ error: "Erro interno ao obter/criar chat" });
+  } finally {
+    conn.release();
   }
 };
 
