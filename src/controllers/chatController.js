@@ -21,19 +21,23 @@ exports.getOrCreateChat = async (req, res) => {
       chatId = existing.id;
     } else {
       // 2) Cria novo chat
-      const [insert] = await conn.query(
-        `INSERT INTO chats (cliente_id, loja_id, criado_em) VALUES (?, ?, NOW())`,
+      // 2) Cria novo chat ou recupera existente de forma atômica
+      const [insertRes] = await conn.query(
+        `INSERT INTO chats (cliente_id, loja_id, criado_em)
+   VALUES (?, ?, NOW())
+   ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)`,
         [clienteId, lojaId]
       );
-      chatId = insert.insertId;
+      // insertRes.insertId agora será o id do chat novo ou o existente
+      chatId = insertRes.insertId;
     }
 
-    // 3) Se veio mensagem inicial, insere como primeira mensagem
+    // 3) Se veio mensagem inicial (initMessage), insere como primeira mensagem
     if (initMessage) {
       await conn.query(
-        `INSERT INTO mensagens 
-          (chat_id, remetente, tipo, conteudo, criado_em) 
-         VALUES (?, 'cliente', 'texto', ?, NOW())`,
+        `INSERT INTO mensagens
+         (chat_id, remetente, tipo, conteudo, criado_em)
+       VALUES (?, 'cliente', 'texto', ?, NOW())`,
         [chatId, decodeURIComponent(initMessage)]
       );
     }
