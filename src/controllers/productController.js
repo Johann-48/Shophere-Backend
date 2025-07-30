@@ -382,6 +382,7 @@ exports.createProduct = async (req, res) => {
 };
 
 // GET /api/produtos/meus
+// GET /api/produtos/meus
 exports.getMyProducts = async (req, res) => {
   const comercioId = req.userId;
   try {
@@ -393,16 +394,30 @@ exports.getMyProducts = async (req, res) => {
          p.descricao,
          p.marca,
          p.quantidade,
-         p.codigo_barras AS barcode,
-         c.id          AS categoria_id,
-         c.nome        AS categoria
+         p.codigo_barras        AS codigoBarras,
+         -- subconsulta para pegar a imagem principal
+         (SELECT url 
+            FROM fotos_produto fp
+           WHERE fp.produto_id = p.id 
+             AND fp.principal = 1
+           LIMIT 1)          AS imagem,
+         c.id                   AS categoria_id,
+         c.nome                 AS categoria
        FROM produtos p
        LEFT JOIN produtos_categorias pc ON pc.produto_id = p.id
-       LEFT JOIN categorias c         ON c.id = pc.categoria_id
+       LEFT JOIN categorias c            ON c.id = pc.categoria_id
        WHERE p.comercio_id = ?`,
       [comercioId]
     );
-    const produtos = rows.map((p) => ({ ...p, preco: parseFloat(p.preco) }));
+
+    // converte preco e renomeia campos para o frontend
+    const produtos = rows.map((p) => ({
+      ...p,
+      preco: parseFloat(p.preco),
+      imagem: p.imagem || null,
+      codigoBarras: p.codigoBarras || "",
+    }));
+
     res.json(produtos);
   } catch (err) {
     console.error("Erro ao buscar meus produtos:", err);
@@ -410,6 +425,7 @@ exports.getMyProducts = async (req, res) => {
   }
 };
 
+// PUT /api/produtos/:id
 // PUT /api/produtos/:id
 exports.updateProduct = async (req, res) => {
   const { id } = req.params;
@@ -421,36 +437,71 @@ exports.updateProduct = async (req, res) => {
     marca,
     quantidade,
     codigoBarras,
-    codigo_barras,
+    imagem, // esperamos a URL nova aqui
+    categoria_id,
   } = req.body;
-  const barcode = codigoBarras || codigo_barras || null;
 
   try {
-    // opcional: checar se o produto pertence a este comércio
+    // 1) Atualiza os campos básicos + código de barras
     await pool.query(
       `UPDATE produtos
          SET nome = ?, preco = ?, descricao = ?, marca = ?, quantidade = ?, codigo_barras = ?
        WHERE id = ? AND comercio_id = ?`,
-      [nome, preco, descricao, marca, quantidade, barcode, id, comercioId]
+      [nome, preco, descricao, marca, quantidade, codigoBarras, id, comercioId]
     );
 
-    if (req.body.categoria_id) {
-      // 1) Apaga relação antiga
+    // 2) Atualiza categoria (se informado)
+    if (categoria_id) {
       await pool.query(`DELETE FROM produtos_categorias WHERE produto_id = ?`, [
         id,
       ]);
-      // 2) Insere a nova relação
       await pool.query(
-        `INSERT INTO produtos_categorias (produto_id, categoria_id)
-     VALUES (?, ?)`,
-        [id, req.body.categoria_id]
+        `INSERT INTO produtos_categorias (produto_id, categoria_id) VALUES (?, ?)`,
+        [id, categoria_id]
       );
     }
 
+    // 3) Atualiza foto principal caso venha nova URL
+    if (imagem) {
+      // primeiro zera todas como principal = 0
+      await pool.query(
+        `UPDATE fotos_produto SET principal = 0 WHERE produto_id = ?`,
+        [id]
+      );
+      // depois marca a nova foto como principal,
+      // ou insere se não existir
+      const [fotos] = await pool.query(
+        `SELECT id FROM fotos_produto WHERE produto_id = ? AND url = ?`,
+        [id, imagem]
+      );
+      if (fotos.length) {
+        await pool.query(
+          `UPDATE fotos_produto SET principal = 1 WHERE id = ?`,
+          [fotos[0].id]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO fotos_produto (produto_id, url, principal) VALUES (?, ?, 1)`,
+          [id, imagem]
+        );
+      }
+    }
+
+    // 4) Retorna o produto atualizado (incluindo nova imagem e barcode)
     const [rows] = await pool.query(
-      `SELECT id, nome, preco, descricao, marca, quantidade, codigo_barras AS barcode, fotos
-   FROM produtos
-   WHERE id = ?`,
+      `SELECT
+         p.id,
+         p.nome,
+         p.preco,
+         p.descricao,
+         p.marca,
+         p.quantidade,
+         p.codigo_barras   AS codigoBarras,
+         (SELECT url FROM fotos_produto fp 
+            WHERE fp.produto_id = p.id AND fp.principal = 1 LIMIT 1
+         )                  AS imagem
+       FROM produtos p
+       WHERE p.id = ?`,
       [id]
     );
     const atualizado = rows[0];

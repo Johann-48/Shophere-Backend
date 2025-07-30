@@ -74,12 +74,22 @@ exports.login = async (req, res) => {
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24); // 1 dia
 
     // 3) Insiro na tabela sessions
-    await pool.query(
-      `INSERT INTO sessions
-        (user_id, token, device_info, ip, expires_at)
-       VALUES (?, ?, ?, ?, ?)`,
-      [payload.id, token, deviceInfo, ip, expiresAt]
-    );
+    // ↓ abaixo de const expiresAt = …
+    if (payload.role === "commerce") {
+      await pool.query(
+        `INSERT INTO sessions_comercios
+      (comercio_id, token, device_info, ip, expires_at)
+     VALUES (?, ?, ?, ?, ?)`,
+        [payload.id, token, deviceInfo, ip, expiresAt]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO sessions
+      (user_id, token, device_info, ip, expires_at)
+     VALUES (?, ?, ?, ?, ?)`,
+        [payload.id, token, deviceInfo, ip, expiresAt]
+      );
+    }
 
     return res.json({
       message: "Autenticação realizada com sucesso.",

@@ -21,15 +21,24 @@ exports.requireAuth = async (req, res, next) => {
     }
 
     // 2) Checa na tabela `sessions` se esta sessão/token é válida
+    const isCommerce = payload.role === "commerce";
+    const table = isCommerce ? "sessions_comercios" : "sessions";
+    const idField = isCommerce ? "comercio_id" : "user_id";
+
+    // consulta dinâmica
     const [rows] = await pool.query(
       `SELECT 1
-         FROM sessions
-        WHERE user_id = ? 
-          AND token = ?
-          AND expires_at > NOW()
-        LIMIT 1`,
+     FROM \`${table}\`
+    WHERE \`${idField}\` = ?
+      AND token = ?
+      AND expires_at > NOW()
+    LIMIT 1`,
       [payload.id, token]
     );
+
+    if (rows.length === 0) {
+      return res.status(401).json({ error: "Sessão inválida ou expirada." });
+    }
     if (rows.length === 0) {
       return res.status(401).json({ error: "Sessão inválida ou expirada." });
     }
