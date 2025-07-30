@@ -122,6 +122,7 @@ exports.listProducts = async (req, res) => {
         p.preco           AS price,
         p.marca,
         p.codigo_barras   AS barcode,
+        c.id   AS comercio_id,
         c.nome            AS commerceName,
         COALESCE(AVG(a.nota), 0)  AS avgRating,
         COALESCE(COUNT(a.id), 0)  AS reviewsCount
@@ -162,8 +163,11 @@ exports.listProducts = async (req, res) => {
         barcode: prod.barcode,
         mainImage,
         thumbnails: fotosDoProduto,
-        comercio: { nome: prod.commerceName },
-
+        // expõe o ID da loja e o nome
+        comercio: {
+          id: prod.comercio_id,
+          nome: prod.commerceName,
+        },
         // aqui, com parseFloat antes de toFixed:
         avgRating: Number(avg.toFixed(2)), // ex: 4.33
         stars: Math.round(avg), // ex: 4
