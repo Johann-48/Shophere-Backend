@@ -198,11 +198,20 @@ exports.uploadProfileImage = async (req, res) => {
 exports.changePassword = async (req, res) => {
   const { senhaAtual, novaSenha } = req.body;
   const userId = req.userId;
+  const userRole = req.userRole;
 
   try {
-    const [rows] = await pool.query("SELECT senha FROM usuarios WHERE id = ?", [
-      userId,
-    ]);
+    let tableName = userRole === "commerce" ? "comercios" : "usuarios";
+
+    const [rows] = await pool.query(
+      `SELECT senha FROM ${tableName} WHERE id = ?`,
+      [userId]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ message: "Usuário não encontrado." });
+    }
+
     const usuario = rows[0];
 
     const senhaCorreta = await bcrypt.compare(senhaAtual, usuario.senha);
@@ -211,13 +220,14 @@ exports.changePassword = async (req, res) => {
     }
 
     const senhaHash = await bcrypt.hash(novaSenha, 10);
-    await pool.query("UPDATE usuarios SET senha = ? WHERE id = ?", [
+    await pool.query(`UPDATE ${tableName} SET senha = ? WHERE id = ?`, [
       senhaHash,
       userId,
     ]);
 
     res.json({ message: "Senha alterada com sucesso." });
   } catch (error) {
+    console.error("Erro ao alterar senha:", error);
     res.status(500).json({ message: "Erro interno." });
   }
 };
