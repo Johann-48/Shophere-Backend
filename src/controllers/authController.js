@@ -132,27 +132,93 @@ exports.getMyProfile = async (req, res) => {
 
 exports.signup = async (req, res) => {
   try {
-    const { nome, email, senha, endereco, telefone } = req.body;
+    const { nome, email, senha, endereco = null, telefone = null } = req.body;
 
+    // Validação dos campos obrigatórios
     if (!nome || !email || !senha) {
-      return res.status(400).json({ message: "Todos os campos obrigatórios." });
+      return res.status(400).json({
+        message: "Nome, email e senha são campos obrigatórios.",
+        missingFields: {
+          nome: !nome,
+          email: !email,
+          senha: !senha,
+        },
+      });
     }
 
+    // Validação de formato de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: "Formato de email inválido." });
+    }
+
+    // Verificar se o email já existe
     const existingUser = await findUserByEmail(email);
     if (existingUser) {
       return res.status(409).json({ message: "Email já cadastrado." });
     }
 
+    // Hashear a senha
     const hashedPassword = await bcrypt.hash(senha, 10);
-    await pool.query(
-      "INSERT INTO usuarios (nome, email, senha, endereco, telefone) VALUES (?, ?, ?, ?, ?)",
-      [nome, email, hashedPassword, endereco || null, telefone || null]
+
+    if (!telefone) {
+      return res.status(400).json({
+        message: "O telefone é obrigatório.",
+      });
+    }
+
+    // Limpa o telefone para manter apenas números
+    const telefoneNumerico = telefone.replace(/\D/g, "");
+
+    if (telefoneNumerico.length < 11) {
+      return res.status(400).json({
+        message: "O telefone deve ter 11 dígitos (DDD + número)",
+      });
+    }
+
+    // Inserir o usuário no banco de dados
+    const [result] = await pool.query(
+      "INSERT INTO usuarios (nome, email, senha, telefone, cidade) VALUES (?, ?, ?, ?, ?)",
+      [
+        nome.trim(),
+        email.toLowerCase().trim(),
+        hashedPassword,
+        telefoneNumerico,
+        null, // cidade será atualizada posteriormente pelo usuário
+      ]
     );
 
-    return res.status(201).json({ message: "Usuário criado com sucesso." });
+    if (result && result.insertId) {
+      return res.status(201).json({
+        message: "Usuário criado com sucesso.",
+        userId: result.insertId,
+      });
+    } else {
+      throw new Error("Falha ao inserir usuário no banco de dados");
+    }
   } catch (error) {
     console.error("Erro no signup:", error);
-    return res.status(500).json({ message: "Erro interno ao criar conta." });
+
+    // Identificar o tipo de erro para retornar uma mensagem mais específica
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ message: "Email já está em uso." });
+    } else if (error.code === "ER_NO_REFERENCED_ROW") {
+      return res
+        .status(400)
+        .json({ message: "Dados inválidos para criar conta." });
+    } else if (error.code === "ER_DATA_TOO_LONG") {
+      return res
+        .status(400)
+        .json({
+          message: "Um ou mais campos excedem o tamanho máximo permitido.",
+        });
+    }
+
+    return res.status(500).json({
+      message: "Erro interno ao criar conta. Por favor, tente novamente.",
+      errorDetail:
+        process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
   }
 };
 
